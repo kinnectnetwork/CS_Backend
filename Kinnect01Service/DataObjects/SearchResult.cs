@@ -54,8 +54,7 @@ namespace Kinnect01Service.DataObjects
         static public List<SearchResult> GetSearchResults(string ownUserId, string searchType)
         {
 
-            //save upserProfiles to memory
-
+            //save userProfiles to memory
             List<UserProfile> userProfiles = context.UserProfiles.ToList();
 
             //Get all records containing own profile from SearchScores Table
@@ -81,8 +80,7 @@ namespace Kinnect01Service.DataObjects
                     OrganisationName = targetProfile.OrganisationName,
                     OverseasExperience = String.Empty,
                     ProfessionalInterests = String.Empty
-                }
-                    );
+                });
             }
 
             return searchResults;
@@ -94,15 +92,18 @@ namespace Kinnect01Service.DataObjects
 
             List<SearchScore> finalSearchScores = new List<SearchScore>();
 
-            //Define Weight from looking it up in total score
-            TotalScore genderWeight = context.TotalScores.Single(u => u.Category == "Gender");
-            TotalScore ageWeight = context.TotalScores.Single(u => u.Category == "Age");
-            TotalScore locationWeight = context.TotalScores.Single(u => u.Category == "Location");
-            TotalScore industryWeight = context.TotalScores.Single(u => u.Category == "Industry");
-            TotalScore organisationTypeWeight = context.TotalScores.Single(u => u.Category == "OrgType");
-            TotalScore jobLevelWeight = context.TotalScores.Single(u => u.Category == "JobLevel");
+            //Load TotalScores into memory
+            List<TotalScore> totalScores = context.TotalScores.ToList();
 
-            //from the record, retrieve the score (note this has to be together)
+            //Define Weight from looking it up in total score
+            TotalScore genderWeight = totalScores.Single(u => u.Category == "Gender");
+            TotalScore ageWeight = totalScores.Single(u => u.Category == "Age");
+            TotalScore locationWeight = totalScores.Single(u => u.Category == "Location");
+            TotalScore industryWeight = totalScores.Single(u => u.Category == "Industry");
+            TotalScore organisationTypeWeight = totalScores.Single(u => u.Category == "OrgType");
+            TotalScore jobLevelWeight = totalScores.Single(u => u.Category == "JobLevel");
+
+            //from the record, retrieve the score (note this has to be seperate from above)
             long genderWeight_Final = Convert.ToInt64(genderWeight.GetType().GetProperty(searchType + "Value").GetValue(genderWeight, null));
             long ageWeight_Final = Convert.ToInt64(ageWeight.GetType().GetProperty(searchType + "Value").GetValue(ageWeight, null));
             long locationWeight_Final = Convert.ToInt64(locationWeight.GetType().GetProperty(searchType + "Value").GetValue(locationWeight, null));
