@@ -54,6 +54,10 @@ namespace Kinnect01Service.DataObjects
         static public List<SearchResult> GetSearchResults(string ownUserId, string searchType)
         {
 
+            //save upserProfiles to memory
+
+            List<UserProfile> userProfiles = context.UserProfiles.ToList();
+
             //Get all records containing own profile from SearchScores Table
             List<SearchScore> searchscores = context.SearchScores.Where(u => u.OwnUserId == ownUserId).ToList();
 
@@ -63,7 +67,7 @@ namespace Kinnect01Service.DataObjects
             foreach (SearchScore item in searchscores)
             {
                 //Retrieve userprofile
-                UserProfile targetProfile = context.UserProfiles.Single(u => u.Id == item.TargetUserId);
+                UserProfile targetProfile = userProfiles.Single(u => u.Id == item.TargetUserId);
 
                 searchResults.Add(new SearchResult()
                 {
@@ -117,14 +121,17 @@ namespace Kinnect01Service.DataObjects
             //Pick up values from JobMapping
             List<JobLevelMapping> jobLevelMappings = context.JobLevelMappings.ToList();
 
+            //Save UserProfiles in memory
+            List<UserProfile> userProfiles = context.UserProfiles.ToList();
+
             //Being Loop
-            foreach (UserProfile ownProfile in context.UserProfiles)
+            foreach (UserProfile ownProfile in userProfiles)
             {
                 //define output SearchResult record for each OwnProfile
                 List<SearchScore> searchscores = new List<SearchScore>();
 
                 //loop through table to get score for indivdiual items
-                foreach (UserProfile targetProfile in context.UserProfiles)
+                foreach (UserProfile targetProfile in userProfiles)
                 {
                     //Ignore the following
                     if (ownProfile.Id == targetProfile.Id) continue;

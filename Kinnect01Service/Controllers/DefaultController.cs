@@ -3,24 +3,30 @@ using Microsoft.Azure.Mobile.Server.Config;
 using Kinnect01Service.Models;
 using System.Data;
 using System.Data.SqlClient;
+using System.Collections.Generic;
+using Kinnect01Service.DataObjects;
+using System.Linq;
 
 namespace Kinnect01Service.Controllers
 {
+
     [MobileAppController]
     public class DefaultController : ApiController
     {
+        //Insert into database
+        Kinnect01Context context = new Kinnect01Context();
+
         // GET api/Default
-        public string Get()
+        public List<Employee> Get()
         {
-            return "Hello from custom controller!";
+            List<Employee> searchResults = context.Employees.Take(10).ToList();
+            
+            return(searchResults);
         }
 
         //PUT api/Default
         public string Put()
         {
-            //Insert into database
-            Kinnect01Context context = new Kinnect01Context();
-
             //create weird table
             var dt = new DataTable();
             dt.Columns.Add("EmployeeID");
