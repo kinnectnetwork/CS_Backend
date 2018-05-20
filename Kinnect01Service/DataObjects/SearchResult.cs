@@ -7,7 +7,6 @@ using System.Web;
 
 namespace Kinnect01Service.DataObjects
 {
-
     public class SearchScore
     {
         public int Id { get; set; }
@@ -25,11 +24,11 @@ namespace Kinnect01Service.DataObjects
         public double JobLevelScore { get; set; }
         public double TotalScore { get; set; }
     }
-    public class SearchFilterCriteria
+    public class SearchFilter
     {
-        public string ownGender { get; set; }
-        public string ownAge { get; set; }
-        public double ownIndustry { get; set; }
+        public string Gender { get; set; }
+        public string Age { get; set; }
+        public double Industry { get; set; }
     }
 
     public class SearchResult
@@ -50,6 +49,51 @@ namespace Kinnect01Service.DataObjects
     public class SearchResultHelper
     {
         static private Kinnect01Context context = new Kinnect01Context();
+
+        static List<TotalScore> totalScores = context.TotalScores.ToList();
+        static long genderWeight_Final;
+        static long ageWeight_Final;
+        static long locationWeight_Final;
+        static long industryWeight_Final;
+        static long organisationTypeWeight_Final;
+        static long jobLevelWeight_Final;
+
+        static List<AgeScore> ageScores = context.AgeScores.ToList();
+        static List<GenderScore> genderScores = context.GenderScores.ToList();
+        static List<IndustryScore> industryScores = context.IndustryScores.ToList();
+        static List<JobLevelScore> jobLevelScores = context.JobLevelScores.ToList();
+        static List<LocationScore> locationScores = context.LocationScores.ToList();
+        static List<OrganisationTypeScore> organisationTypeScores = context.OrganisationTypeScores.ToList();
+
+        static List<JobLevelMapping> jobLevelMappings = context.JobLevelMappings.ToList();
+        static List<UserProfile> userProfiles = context.UserProfiles.ToList();
+
+        static public void RefreshTables(string searchType)
+        {
+
+            //Load TotalScores into List & define Weight based on SearchType
+            totalScores = context.TotalScores.ToList();
+            genderWeight_Final = GetWeight(totalScores, searchType, "Gender");
+            ageWeight_Final = GetWeight(totalScores, searchType, "Age");
+            locationWeight_Final = GetWeight(totalScores, searchType, "Location");
+            industryWeight_Final = GetWeight(totalScores, searchType, "Industry");
+            organisationTypeWeight_Final = GetWeight(totalScores, searchType, "OrgType");
+            jobLevelWeight_Final = GetWeight(totalScores, searchType, "JobLevel");
+
+            //Pick up values from each table and save it list
+            ageScores = context.AgeScores.ToList();
+            genderScores = context.GenderScores.ToList();
+            industryScores = context.IndustryScores.ToList();
+            jobLevelScores = context.JobLevelScores.ToList();
+            locationScores = context.LocationScores.ToList();
+            organisationTypeScores = context.OrganisationTypeScores.ToList();
+
+            //Pick up values from JobMapping
+            jobLevelMappings = context.JobLevelMappings.ToList();
+
+            //Save UserProfiles in List
+            userProfiles = context.UserProfiles.ToList();
+        }
 
         static public List<SearchResult> GetSearchResults(string ownUserId, string searchType)
         {
@@ -87,100 +131,91 @@ namespace Kinnect01Service.DataObjects
 
         }
 
+        static public List<SearchScore> GetSearchScore(UserProfile ownProfile, string searchType, SearchFilter searchFilter, bool IsRefreshTable)
+        {
+
+            List<SearchScore> searchScores = new List<SearchScore>();
+
+            //Refresh tables
+            if (IsRefreshTable)
+                RefreshTables(searchType);
+
+            //loop through table to get score for indivdiual items
+            foreach (UserProfile targetProfile in userProfiles)
+            {
+                //Ignore the following
+                if (ownProfile.Id == targetProfile.Id) continue;
+                //need to add Mentor / mentee Filter
+
+                //Get the score for each dimension
+                double genderScore = GetGenderScore(genderScores, ownProfile.Gender, targetProfile.Gender, searchType);
+                double ageScore = GetAgeScore(ageScores, ownProfile.Age, targetProfile.Age, searchType);
+                double locationScore = GetLocationScore(locationScores, ownProfile.Latitude, ownProfile.Longtitude, targetProfile.Latitude, targetProfile.Longtitude, searchType);
+                double industryScore = GetIndustryScore(industryScores, ownProfile.Industry, targetProfile.Industry, searchType);
+                double organisationTypeScore = GetOrganisationTypeScore(organisationTypeScores, ownProfile.OrganisationType, targetProfile.OrganisationType, searchType);
+                double jobLevelScore = GetJobLevelScore(jobLevelMappings, jobLevelScores, ownProfile.JobLevel, targetProfile.JobLevel, searchType);
+
+                //Calculate TotalScore
+                double totalScore = (genderWeight_Final * genderScore
+                                    + ageWeight_Final * ageScore
+                                    + locationWeight_Final * locationScore
+                                    + industryWeight_Final * industryScore
+                                    + organisationTypeWeight_Final * organisationTypeScore
+                                    + jobLevelWeight_Final * jobLevelScore) / 100;
+
+                searchScores.Add(new SearchScore()
+                {
+                    OwnUserId = ownProfile.Id,
+                    TargetUserId = targetProfile.Id,
+                    SearchType = searchType,
+                    Distance = DistanceAlgorithm.DistanceBetweenPlaces(ownProfile.Latitude, ownProfile.Longtitude, targetProfile.Latitude, targetProfile.Longtitude),
+                    GenderScore = genderScore,
+                    AgeScore = ageScore,
+                    LocationScore = locationScore,
+                    IndustryScore = industryScore,
+                    OrganisationTypeScore = organisationTypeScore,
+                    JobLevelScore = jobLevelScore,
+                    TotalScore = totalScore
+                });
+
+            }
+
+            searchScores = searchScores.OrderByDescending(x => x.TotalScore).ToList();
+
+            return (searchScores);
+        }
+
         static public List<SearchScore> PopulateSearchScoresTable(string searchType)
         {
 
             List<SearchScore> finalSearchScores = new List<SearchScore>();
+            SearchFilter searchFilter = new SearchFilter();
 
-            //Load TotalScores into memory
-            List<TotalScore> totalScores = context.TotalScores.ToList();
+            RefreshTables(searchType);
 
-            //Define Weight from looking it up in total score
-            TotalScore genderWeight = totalScores.Single(u => u.Category == "Gender");
-            TotalScore ageWeight = totalScores.Single(u => u.Category == "Age");
-            TotalScore locationWeight = totalScores.Single(u => u.Category == "Location");
-            TotalScore industryWeight = totalScores.Single(u => u.Category == "Industry");
-            TotalScore organisationTypeWeight = totalScores.Single(u => u.Category == "OrgType");
-            TotalScore jobLevelWeight = totalScores.Single(u => u.Category == "JobLevel");
-
-            //from the record, retrieve the score (note this has to be seperate from above)
-            long genderWeight_Final = Convert.ToInt64(genderWeight.GetType().GetProperty(searchType + "Value").GetValue(genderWeight, null));
-            long ageWeight_Final = Convert.ToInt64(ageWeight.GetType().GetProperty(searchType + "Value").GetValue(ageWeight, null));
-            long locationWeight_Final = Convert.ToInt64(locationWeight.GetType().GetProperty(searchType + "Value").GetValue(locationWeight, null));
-            long industryWeight_Final = Convert.ToInt64(industryWeight.GetType().GetProperty(searchType + "Value").GetValue(industryWeight, null));
-            long organisationTypeWeight_Final = Convert.ToInt64(organisationTypeWeight.GetType().GetProperty(searchType + "Value").GetValue(organisationTypeWeight, null));
-            long jobLevelWeight_Final = Convert.ToInt64(jobLevelWeight.GetType().GetProperty(searchType + "Value").GetValue(jobLevelWeight, null));
-
-            //Pick up values from each table and save it in memory
-            List<AgeScore> ageScores = context.AgeScores.ToList();
-            List<GenderScore> genderScores = context.GenderScores.ToList();
-            List<IndustryScore> industryScores = context.IndustryScores.ToList();
-            List<JobLevelScore> jobLevelScores = context.JobLevelScores.ToList();
-            List<LocationScore> locationScores = context.LocationScores.ToList();
-            List<OrganisationTypeScore> organisationTypeScores = context.OrganisationTypeScores.ToList();
-
-            //Pick up values from JobMapping
-            List<JobLevelMapping> jobLevelMappings = context.JobLevelMappings.ToList();
-
-            //Save UserProfiles in memory
-            List<UserProfile> userProfiles = context.UserProfiles.ToList();
-
-            //Being Loop
+            //Begin loop for all users
             foreach (UserProfile ownProfile in userProfiles)
             {
                 //define output SearchResult record for each OwnProfile
-                List<SearchScore> searchscores = new List<SearchScore>();
+                List<SearchScore> searchScores = new List<SearchScore>();
+                searchScores = GetSearchScore(ownProfile, searchType, searchFilter, false);
 
-                //loop through table to get score for indivdiual items
-                foreach (UserProfile targetProfile in userProfiles)
-                {
-                    //Ignore the following
-                    if (ownProfile.Id == targetProfile.Id) continue;
-                    //need to add Mentor / mentee Filter
-
-                    //Get Score for each dimension
-                    double genderScore = GetGenderScore(genderScores, ownProfile.Gender, targetProfile.Gender, searchType);
-                    double ageScore = GetAgeScore(ageScores, ownProfile.Age, targetProfile.Age, searchType);
-                    double locationScore = GetLocationScore(locationScores, ownProfile.Latitude, ownProfile.Longtitude, targetProfile.Latitude, targetProfile.Longtitude, searchType);
-                    double industryScore = GetIndustryScore(industryScores, ownProfile.Industry, targetProfile.Industry, searchType);
-                    double organisationTypeScore = GetOrganisationTypeScore(organisationTypeScores, ownProfile.OrganisationType, targetProfile.OrganisationType, searchType);
-                    double jobLevelScore = GetJobLevelScore(jobLevelMappings, jobLevelScores, ownProfile.JobLevel, targetProfile.JobLevel, searchType);
-
-                    //Calculate TotalScore
-                    double totalScore = (genderWeight_Final * genderScore
-                                        + ageWeight_Final * ageScore
-                                        + locationWeight_Final * locationScore
-                                        + industryWeight_Final * industryScore
-                                        + organisationTypeWeight_Final * organisationTypeScore
-                                        + jobLevelWeight_Final * jobLevelScore) / 100;
-
-                    searchscores.Add(new SearchScore()
-                    {
-                        OwnUserId = ownProfile.Id,
-                        TargetUserId = targetProfile.Id,
-                        SearchType = searchType,
-                        Distance = DistanceAlgorithm.DistanceBetweenPlaces(ownProfile.Latitude, ownProfile.Longtitude, targetProfile.Latitude, targetProfile.Longtitude),
-                        GenderScore = genderScore,
-                        AgeScore = ageScore,
-                        LocationScore = locationScore,
-                        IndustryScore = industryScore,
-                        OrganisationTypeScore = organisationTypeScore,
-                        JobLevelScore = jobLevelScore,
-                        TotalScore = totalScore
-                    });
-
-                }
-
-                //Get top 10 search results and save to final list
-                searchscores = searchscores.OrderByDescending(x => x.TotalScore).ToList();
-                //searchscores = searchscores.OrderByDescending(x => x.TotalScore).Take(10).ToList();
-                foreach (SearchScore item in searchscores)
+                //add to searchScore to final SearchScorelist
+                foreach (SearchScore item in searchScores)
                 {
                     finalSearchScores.Add(item);
                 }
             }
 
             return (finalSearchScores);
+        }
+
+        static public long GetWeight(List<TotalScore> totalScores, string searchType, string fieldName)
+        {
+
+            TotalScore weightTotalScore = totalScores.Single(u => u.Category == fieldName);
+            long weight = Convert.ToInt64(weightTotalScore.GetType().GetProperty(searchType + "Value").GetValue(weightTotalScore, null));
+            return (weight);
         }
 
         static private double GetGenderScore(List<GenderScore> genderScores, string ownGender, string targetGender, string searchType)
